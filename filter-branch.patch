@@ -1,0 +1,96 @@
+diff --git a/git-filter-branch b/git-filter-branch
+index ac2a005..0dcbe47 100755
+--- a/git-filter-branch
++++ b/git-filter-branch
+@@ -267,6 +267,24 @@ case "$filter_subdir" in
+ 	;;
+ esac
+ 
++# add null object to repository for is-binary
++NULL_OBJECT=`git hash-object -w /dev/null`
++export NULL_OBJECT
++
++# based on
++# http://stackoverflow.com/questions/6119956/how-to-determine-if-git-handles-a-file-as-binary-or-as-text
++BINARY_NUMSTAT=$(printf '%s\t-\t' -)
++declare -A GIT_OBJ_DICT
++export BINARY_NUMSTAT
++is-binary () {
++	diffstat="`git diff --numstat $NULL_OBJECT $1`"
++	case $diffstat in
++		"$BINARY_NUMSTAT"*) return 0 ;;
++		*) return 1 ;;
++	esac
++}
++export -f is-binary
++
+ git rev-list --reverse --topo-order --default HEAD \
+ 	--parents --simplify-merges $rev_args "$@" > ../revs ||
+ 	die "Could not get the commits"
+@@ -300,6 +318,63 @@ while read commit parents; do
+ 
+ 	GIT_COMMIT=$commit
+ 	export GIT_COMMIT
++
++	if [ "${#parents}" != "40" ]; then
++		readarray -t < <(git ls-files -s | sed "s/\t/ /" | cut -f1,2,4)
++	else
++		readarray -t < <(git diff-tree -r --no-commit-id $parents $commit | sed "s/\t/ /" | cut -f2,4,6 -d' ')
++	fi
++	for line in "${MAPFILE[@]}"
++	do
++		object="${line:7:40}"
++		if [ -z "${GIT_OBJ_DICT[X$object]}" ]; then
++			if [ "${line:0:2}" != "10" ]; then
++				# not a regular file in this case, so skip it
++				new_object=$object
++			elif is-binary $object; then
++				# don't mess with binaries (such as png files)
++				new_object=$object
++			elif [ "${line: -6}" == ".patch" -o "${line: -5}" == ".diff" ]; then
++				# don't mess with diff or patch files
++				new_object=$object
++			else
++				new_object=`git cat-file -p $object | sed 's+\s*$++' | git hash-object -w --stdin`
++			fi
++			GIT_OBJ_DICT[X$object]=$new_object
++		fi
++	done
++
++	git ls-files -s |
++		{
++			while read a object b c
++			do
++				echo -e "$a ${GIT_OBJ_DICT[X$object]} $b\t$c"
++			done
++		} |
++		{
++			if [ "$REPO" == "." ]; then
++				sed "s+\tspkg/bin+\t$SAGE_SCRIPTS_DIR+" |
++					sed "s+\tspkg+\t$SAGE_BUILD+"
++			elif [ "$REPO" == "$SAGE_EXTDIR" ]; then
++				sed -e "s+\t+&$REPO/+" -e '/~$/d' |
++					sed "s+$REPO/sage/ext/mac-app+$SAGE_MACAPP+"
++			elif [ "$REPO" == "$SAGE_SRC" ]; then
++				sed "/\(\.tar\|\(~\|\.zip\|\.spkg\)\$\)/d" |
++					sed "s+\t+&$REPO/+"
++			else
++				sed "/\(\tsrc\|\.tar\|\(~\|\.zip\|\.spkg\)\$\)/d" |
++					sed "s+\t+&$REPO/+"
++			fi
++		} |
++		GIT_INDEX_FILE=$GIT_INDEX_FILE.new git update-index --index-info &&
++		{
++			if [ -f $GIT_INDEX_FILE.new ]; then
++				mv $GIT_INDEX_FILE.new $GIT_INDEX_FILE
++			else
++				rm $GIT_INDEX_FILE
++			fi
++		}
++
+ 	git cat-file commit "$commit" >../commit ||
+ 		die "Cannot read commit $commit"
+ 
+-- 
+1.8.3.2
+
