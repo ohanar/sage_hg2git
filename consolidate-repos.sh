@@ -91,6 +91,12 @@ process-spkg () {
     echo "*** Found SPKG: $PKGNAME version $PKGVER"
     tar x -p -C "$TMPDIR"/spkg -f "$SPKGPATH"
 
+    if [ ! -d "${HG_REPO}/.hg" ]; then
+        echo $PKGNAME no_repo >> $OUTDIR/failed_spkgs.txt
+        rm -rf "$HG_REPO"
+        return
+    fi
+
     TAGS_SWITCH=''
     case $PKGNAME in
         sage_root)
@@ -128,6 +134,12 @@ process-spkg () {
             NEW_TARBALL="$TARBALLS"/$PKGNAME-${PKGVER_UPSTREAM}.new${TAREXT}
             TARBALL="$TARBALLS"/$PKGNAME-${PKGVER_UPSTREAM}${TAREXT}
 
+            if [ ! -d "$HG_REPO/src" ]; then
+                echo $PKGNAME no_src >> $OUTDIR/failed_spkgs.txt
+                rm -rf "$HG_REPO"
+                return
+            fi
+
             pushd "$HG_REPO" > /dev/null
             mv -T src $PKGNAME-$PKGVER_UPSTREAM
             if [ -f "$TARBALL" ]; then
@@ -143,7 +155,12 @@ process-spkg () {
     # convert the SPKG's hg repo to git
     git init --bare "$TMP_REPO"
     pushd "$TMP_REPO" > /dev/null
-    "$CUR"/fast-export/hg-fast-export.sh -r "$HG_REPO" -M master
+    "$CUR"/fast-export/hg-fast-export.sh -r "$HG_REPO" -M master || {
+        echo $PKGNAME bad_repo >> $OUTDIR/failed_spkgs.txt;
+        rm -rf "$HG_REPO";
+        return;
+    }
+
     rm -rf "$HG_REPO"
 
     # rewrite paths
