@@ -66,12 +66,12 @@ index ac2a005..0dcbe47 100755
 +		} |
 +		{
 +			if [ "$REPO" == "." ]; then
-+				sed "s+\tspkg/bin+\t$SAGE_SCRIPTS_DIR+" |
-+					sed "s+\tspkg+\t$SAGE_BUILD+"
-+			elif [ "$REPO" == "$SAGE_EXTDIR" ]; then
++				sed "s+\tspkg/bin+\tsrc/bin+" |
++					sed "s+\tspkg+\tbuild+"
++			elif [ "$REPO" == "src/ext" ]; then
 +				sed -e "s+\t+&$REPO/+" -e '/~$/d' |
-+					sed "s+$REPO/sage/ext/mac-app+$SAGE_MACAPP+"
-+			elif [ "$REPO" == "$SAGE_SRC" ]; then
++					sed "s+$REPO/sage/ext/mac-app+src/mac-app+"
++			elif [ "$REPO" == "src" ]; then
 +				sed "/\(\.tar\|\(~\|\.zip\|\.spkg\)\$\)/d" |
 +					sed "s+\t+&$REPO/+"
 +			else
